@@ -1,32 +1,58 @@
 module MultiResolutionFilters
 
 using RegionTrees
+using StaticArrays
 using Statistics, StatsBase
 
 export ParticleRefinery,
     CellData,
+    MultiResolutionPF,
     nobs,
     needs_refinement,
     inrect,
     calculate_weights,
     area,
     particlefilter,
-    refine_data
+    refine_data,
+    adaptive_filter!
 
 
 struct ParticleRefinery <: AbstractRefinery
-    downscale         # function downscale(state, child_area) -> state_new
-    observe           # function observe(state) -> simulated observation
-    loglikelihood     # Function loglikelihood(state, observations)
-    needs_refinement  # function needs_refinement(cell) -> Bool
-    jitter            # function jitter(state) -> state + noise
+    downscale::Function         # function downscale(state, child_area) -> state_new
+    observe::Function           # function observe(state) -> simulated observation
+    loglikelihood::Function     # Function loglikelihood(state, observations)
+    needs_refinement::Function  # function needs_refinement(cell) -> Bool
+    jitter::Function            # function jitter(state) -> state + noise
+end
+
+function ParticleRefinery(downscale::Function, observe::Function, loglikelihood::Function,
+        needs_refinement::Function, jitter=x -> x)
+    return ParticleRefinery(downscale, observe, loglikelihood, needs_refinement, jitter)
 end
 
 struct CellData
-    locations
-    observations
-    state_particles
-    state_weights
+    locations::AbstractVector
+    observations::AbstractVector
+    state_particles::AbstractVector
+    state_weights::AbstractVector
+end
+
+struct MultiResolutionPF
+    locations::AbstractVector
+    observations::AbstractVector
+    refinery::AbstractRefinery
+    tree::Cell
+end
+
+function MultiResolutionPF(locations::AbstractVector, observations::AbstractVector,
+        refinery::AbstractRefinery, state_init::AbstractVector)
+    origin = SVector(reduce((x1, x2) -> min.(x1, x2), locations)...)
+    extreme = SVector(reduce((x1, x2) -> max.(x1, x2), locations)...)
+    extent = extreme - origin
+    nparticles = length(state_init)
+    data = CellData(locations, observations, state_init, ones(nparticles)/nparticles)
+    tree = Cell(origin, extent, data)
+    return MultiResolutionPF(locations, observations, refinery, tree)
 end
 
 StatsBase.nobs(cd::CellData) = length(cd.observations)
@@ -51,7 +77,6 @@ function particlefilter(r, state_particles, observations)
     nparticles = length(state_particles)
     w = calculate_weights(state_particles, observations, r.loglikelihood)
     new_states = sample(r.jitter.(state_particles), weights(w), nparticles)
-    # new_states = r.jitter.(new_states)
     return new_states, w
 end
 
@@ -70,6 +95,10 @@ function RegionTrees.refine_data(r::ParticleRefinery, cell::Cell, indices)
         weights_filt = data.state_weights
     end
     return CellData(child_locations, child_observations, state_filt, weights_filt)
+end
+
+function adaptive_filter!(mrf::MultiResolutionPF)
+    adaptivesampling!(mrf.tree, mrf.refinery)
 end
 
 
