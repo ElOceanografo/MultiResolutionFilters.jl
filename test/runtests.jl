@@ -1,6 +1,7 @@
 using MultiResolutionFilters
 using Test
 using DataFrames, CSV
+using Distributions
 using StaticArrays
 
 @testset "MultiResolutionFilters.jl" begin
@@ -8,15 +9,17 @@ using StaticArrays
     locations = [SVector(row...) for row in eachrow(data[:, [:x, :y]])]
     observations = data.z
     nparticles = 1000
+    state_particles = randn(nparticles)
 
-    x0 = [0.0, 0.0]
-    w = [1e3, 1e3]
+    loglik(state, obs) = loglikelihood(Normal(state, 0.1), obs)
+    predict_downscale(state, child_area) = state + 0.5randn()
+    observe(state) = state + randn()
+    needsrefinement(cell) = area(cell.boundary) > 250#dA[6]
+    jitter(state) = state
 
-    cd = CellData(1:length(locations),
-        randn(nparticles),
-        ones(nparticles)/nparticles)
+    refinery = ParticleRefinery(predict_downscale, observe, loglik, needsrefinement, jitter)
+    mrf = MultiResolutionPF(locations, observations, refinery, state_particles)
+    adaptive_filter!(mrf)
 
-    mrf = MultiResolutionPF(
-
-    )
+    @test 1 == 1
 end
