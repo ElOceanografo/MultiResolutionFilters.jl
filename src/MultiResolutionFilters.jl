@@ -32,16 +32,6 @@ end
 StatsBase.nobs(cd::CellData) = length(cd.observations)
 
 function RegionTrees.needs_refinement(r::ParticleRefinery, cell)
-    # d = length(cell.boundary.origin)
-    # dims = Tuple(2 for _ in 1:d)
-    # idxs = CartesianIndices(dims)
-    # npoints = zeros(Int, length(idxs))
-    # for (i, ci) in enumerate(idxs)
-    #     boundary = child_boundary(cell, ci.I)
-    #     npoints[i] = sum([inrect(xi, boundary) for xi in eachcol(cell.data.x)])
-    # end
-    # return all(npoints .> r.n)
-    # return size(cell.data.x, 2) > r.min_points
     r.needs_refinement(cell)
 end
 
@@ -70,18 +60,16 @@ function RegionTrees.refine_data(r::ParticleRefinery, cell::Cell, indices)
     data = cell.data
     state_pred = r.downscale.(data.state_particles, area(boundary))
 
-    ii = [inrect(x, boundary) for x in data.locations]
-    child_locations = data.locations[ii]
-    child_observations = data.observations[ii]
-    if sum(ii) > 0
+    ii = findall(x -> inrect(x, boundary), data.locations)
+    child_locations = @view data.locations[ii]
+    child_observations = @view data.observations[ii]
+    if length(ii) > 0
         state_filt, weights_filt = particlefilter(r, state_pred, child_observations)
     else
         state_filt = state_pred
         weights_filt = data.state_weights
     end
     return CellData(child_locations, child_observations, state_filt, weights_filt)
-    # return (x=new_x, z=new_observations, state=new_state, w=new_w, n=size(new_x, 2),
-    #     nparticles=nparticles)
 end
 
 
