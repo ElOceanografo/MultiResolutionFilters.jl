@@ -31,49 +31,51 @@ state_weights = ones(nparticles) / nparticles
 x0 = [0., 0.]
 width = [500., 500]
 
-areas = (500 ./ (1:20)).^2
+dx = 500 ./ 2.0.^(0:10)
+dA = dx.^2
+plot(dx)
+plot(dA)
 
 loglik(state, obs) = loglikelihood(Normal(state, 0.1), obs)
 predict_downscale(state, child_area) = state + 0.5randn()
 observe(state) = state + randn()
-needsrefinement(cell) = area(cell.boundary) > areas[20]
-# needsrefinement(cell) = nobs(cell.data) > 5
+needsrefinement(cell) = area(cell.boundary) > dA[6]
 jitter(state) = state #+ 0.05randn()
 
-root_data = CellData(x, z, state_particles, state_weights)
-root = Cell(SVector(x0...), SVector(width...), root_data)
-r = ParticleRefinery(predict_downscale, observe, loglik, needsrefinement, jitter)
-adaptivesampling!(root, r)
+r = ParticleRefinery(predict_downscale, observe, loglik, needsrefinement)
+mrf = MultiResolutionPF(x, z, r, state_particles)
+adaptive_filter!(mrf)
+tree = mrf.tree
 
 # plt = plot(legend=false)
-# for leaf in allleaves(root)
+# for leaf in allleaves(tree)
 #     density!(plt, leaf.data.state_particles, color=:black, alpha=0.1)
 # end
 # plt
 
 
-μs = [mean(leaf.data.state_particles) for leaf in allleaves(root)]
+μs = [mean(leaf.data.state_particles) for leaf in allleaves(tree)]
 histogram(μs)
 
 cg = cgrad(:magma);
 plt_post = plot(legend=nothing);
-for leaf in allleaves(root)
-    # if leaf.data.n > 0
-        xl, yl = leaf.boundary.origin
-        w, h = leaf.boundary.widths
-        μ = mean(leaf.data.state_particles)
-        c = (μ - zl[1]) / (zl[2] - zl[1])
-        plot!(plt_post, Shape(xl .+ [0,w,w,0], yl .+ [0,0,h,h]), fill=get(cg, c),
-            linecolor=get(cg, c))
-    # end
+for leaf in allleaves(tree)
+    xl, yl = leaf.boundary.origin
+    w, h = leaf.boundary.widths
+    μ = mean(leaf.data.state_particles)
+    c = (μ - zl[1]) / (zl[2] - zl[1])
+    # nobs(leaf.data) > 0 ? linecolor = :black : linecolor = get(cg, c)
+    linecolor = get(cg, c)
+    plot!(plt_post, Shape(xl .+ [0,w,w,0], yl .+ [0,0,h,h]), fill=get(cg, c),
+        linecolor=linecolor)
 end
 plt_post
 scatter!(plt_post, first.(x), last.(x), color=:black, markersize=2)
 
 cg = cgrad(:viridis);
-cl = extrema([std(leaf.data.state_particles) for leaf in allleaves(root)])
+cl = extrema([std(leaf.data.state_particles) for leaf in allleaves(tree)])
 plt_std = plot(legend=nothing);
-for leaf in allleaves(root)
+for leaf in allleaves(tree)
     # if leaf.data.n > 0
         xl, yl = leaf.boundary.origin
         w, h = leaf.boundary.widths
@@ -88,9 +90,13 @@ plt_std
 plot(plt_truth, plt_post, size=(800, 500))
 
 B = [sum(area(leaf.boundary) * sample(leaf.data.state_particles)
-    for leaf in allleaves(root)) for i in 1:1000]
+    for leaf in allleaves(tree)) for i in 1:1000]
 
 histogram(B)
 
 dA = 1.0
 vline!([sum(Z*dA)])
+
+
+ii = sortperm([leaf.boundary.origin for leaf in allleaves(tree)])
+heatmap(reshape(μs[ii], 32, 32))
