@@ -20,10 +20,10 @@ z = z + 0.05randn(length(z))
 x = SVector{2}.(x)
 
 zl = extrema(Z)
-plt_truth = heatmap(Z, clim=zl, legend=false)
+plt_truth = heatmap(Z, clim=zl, legend=false, xlabel="X", ylabel="Y")
 scatter!(plt_truth, first.(x), last.(x), color=:black, markersize=2, label="")
 
-scatter(first.(x), last.(x), zcolor=z, markerstrokewidth=0, legend=false)
+scatter(first.(x), last.(x), zcolor=z, markerstrokewidth=0, legend=false, xlabel="X", ylabel="Y")
 
 nparticles = 2000
 state_particles = randn(nparticles)
@@ -47,18 +47,37 @@ mrf = MultiResolutionPF(x, z, r, state_particles)
 adaptive_filter!(mrf)
 tree = mrf.tree
 
-# plt = plot(legend=false)
-# for leaf in allleaves(tree)
-#     density!(plt, leaf.data.state_particles, color=:black, alpha=0.1)
-# end
-# plt
+
+p0 = plot(legend=false)
+v = hcat(collect(vertices(tree.boundary))...)
+plot!(p0, v[1,[1,2,4,3,1]], v[2,[1,2,4,3,1]])
+c1 = children(tree)
+p1 = plot(legend=false)
+for c in c1
+    v = hcat(collect(vertices(c.boundary))...)
+    plot!(p1, v[1,[1,2,4,3,1]], v[2,[1,2,4,3,1]], color=2)
+end
+p1
+p2 = plot(legend=false)
+c2 = reduce(vcat, [children(c) for c in c1])
+for c in c2
+    v = hcat(collect(vertices(c.boundary))...)
+    plot!(p2, v[1,[1,2,4,3,1]], v[2,[1,2,4,3,1]], color=3)
+end
+c3 = reduce(vcat, [children(c) for c in c2])
+p3 = plot(legend=false)
+for c in c3
+    v = hcat(collect(vertices(c.boundary))...)
+    plot!(p3, v[1,[1,2,4,3,1]], v[2,[1,2,4,3,1]], color=4)
+end
+plot(p0, p1, p2, p3)
 
 
 μs = [mean(leaf.data.state_particles) for leaf in allleaves(tree)]
 histogram(μs)
 
 cg = cgrad(:magma);
-plt_post = plot(legend=nothing);
+plt_post = plot(legend=nothing, xlabel="X", ylabel="Y");
 for leaf in allleaves(tree)
     xl, yl = leaf.boundary.origin
     w, h = leaf.boundary.widths
@@ -74,7 +93,7 @@ scatter!(plt_post, first.(x), last.(x), color=:black, markersize=2)
 
 cg = cgrad(:viridis);
 cl = extrema([std(leaf.data.state_particles) for leaf in allleaves(tree)])
-plt_std = plot(legend=nothing);
+plt_std = plot(legend=nothing, xlabel="X", ylabel="Y");
 for leaf in allleaves(tree)
     # if leaf.data.n > 0
         xl, yl = leaf.boundary.origin
