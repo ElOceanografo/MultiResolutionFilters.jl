@@ -3,9 +3,14 @@ module MultiResolutionFilters
 using RegionTrees
 using StaticArrays
 using Statistics, StatsBase
+using Distributions
+using Optim
+using ForwardDiff
+using LinearAlgebra
+using DataStructures
 
 export ParticleRefinery,
-    CellData,
+    ParticleCellData,
     MultiResolutionPF,
     nobs,
     needs_refinement,
@@ -14,10 +19,27 @@ export ParticleRefinery,
     area,
     particlefilter,
     refine_data,
-    adaptive_filter!
+    adaptive_filter!,
+    observe!,
+    # 
+    KalmanRefinery,
+    KalmanCellData,
+    data_indices,
+    has_observation,
+    observe!,
+    observe_data!,
+    filter_upscale!,
+    smooth_downscale!,
+    multiresolution_smooth!,
+    isfiltered,
+    issmoothed,
+    ready_to_merge,
+    merge_child_states!
 
 
-struct ParticleRefinery <: AbstractRefinery
+abstract type StateSpaceRefinery <: AbstractRefinery end
+
+struct ParticleRefinery <: StateSpaceRefinery
     downscale::Function         # function downscale(state, child_area) -> state_new
     observe::Function           # function observe(state) -> simulated observation
     loglikelihood::Function     # Function loglikelihood(state, observations)
@@ -30,7 +52,7 @@ function ParticleRefinery(downscale::Function, observe::Function, loglikelihood:
     return ParticleRefinery(downscale, observe, loglikelihood, needs_refinement, jitter)
 end
 
-struct CellData
+struct ParticleCellData
     locations::AbstractVector
     observations::AbstractVector
     state_particles::AbstractVector
@@ -50,12 +72,12 @@ function MultiResolutionPF(locations::AbstractVector, observations::AbstractVect
     extreme = SVector(reduce((x1, x2) -> max.(x1, x2), locations)...)
     extent = extreme - origin
     nparticles = length(state_init)
-    data = CellData(locations, observations, state_init, ones(nparticles)/nparticles)
+    data = ParticleCellData(locations, observations, state_init, ones(nparticles)/nparticles)
     tree = Cell(origin, extent, data)
     return MultiResolutionPF(locations, observations, refinery, tree)
 end
 
-StatsBase.nobs(cd::CellData) = length(cd.observations)
+StatsBase.nobs(cd::ParticleCellData) = length(cd.observations)
 
 function RegionTrees.needs_refinement(r::ParticleRefinery, cell)
     r.needs_refinement(cell)
@@ -94,7 +116,7 @@ function RegionTrees.refine_data(r::ParticleRefinery, cell::Cell, indices)
         state_filt = state_pred
         weights_filt = data.state_weights
     end
-    return CellData(child_locations, child_observations, state_filt, weights_filt)
+    return ParticleCellData(child_locations, child_observations, state_filt, weights_filt)
 end
 
 function adaptive_filter!(mrf::MultiResolutionPF)
@@ -102,4 +124,5 @@ function adaptive_filter!(mrf::MultiResolutionPF)
 end
 
 
+include("kalman.jl")
 end
