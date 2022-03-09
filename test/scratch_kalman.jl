@@ -12,7 +12,6 @@ data = CSV.read("test/test_data.csv", DataFrame)
 locations = [SVector(row...) for row in eachrow(data[:, [:x, :y]])]
 x = [el for el in data.x]
 y = [el for el in data.y]
-# observations = [el for el in data.z]
 observations = rand.(Poisson.(exp.(2.5data.z)))
 
 plt = scatter(x, y, zcolor=observations, label="")
@@ -27,57 +26,15 @@ r = KalmanRefinery(I(2),
     locations,
     obs_loglik,
     MvNormal(zeros(2), 1.0),
-    1)
+    1
+)
 
-root = KalmanCellData(1:length(observations), r.state_prior)
-tree = Cell(SVector(0.0, 0.0), SVector(1e3, 1e3), root)
-adaptivesampling!(tree, r)
-
-length(collect(allleaves(tree)))
-
-for leaf in allleaves(tree)
-    v = hcat(collect(vertices(leaf.boundary))...)
-    c = has_observation(leaf) ? :red : :black
-    plot!(plt, v[1,[1,2,4,3,1]], v[2,[1,2,4,3,1]], color=c, label="")
-end
-plt
-
-ii = findall(has_observation, collect(allleaves(tree)))
-i = first(ii)
-leaf = collect(allleaves(tree))[i]
-leaf.data.state
-observation = r.observations[leaf.data.ii_data]
-observe!(leaf, r.observations[only(leaf.data.ii_data)], r.obs_loglik)
-
-observe_data!(r, tree)
-
-children = [leaf for leaf in allleaves(tree) if isfiltered(leaf)]
-parents = setdiff(collect(allcells(tree)), children)
-ii = ready_to_merge.(parents)
-cells_to_merge = parents[ii]
-for cell in cells_to_merge
-    merge_child_states!(r, cell)
-end
-parents = parents[.! ii]
-
-# parents = parents[ready_to_merge.(parents)]
-
-# for parent in parents
-
-
-
-filter_upscale!(r, tree)
-all(isfiltered.(allcells(tree)))
-
-smooth_downscale!(r, tree, tree.data.state)
-all(issmoothed.(allcells(tree)))
-
-#################
 root = KalmanCellData(1:length(observations), r.state_prior)
 tree = Cell(SVector(0.0, 0.0), SVector(1e3, 1e3), root)
 adaptivesampling!(tree, r)
 
 multiresolution_smooth!(r, tree)
+
 cg = cgrad(:magma);
 plt_post = plot(legend=nothing, xlabel="X", ylabel="Y");
 zl = [-1, 1]
