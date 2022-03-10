@@ -6,7 +6,7 @@ struct KalmanRefinery <: StateSpaceRefinery
     locations
     obs_loglik
     state_prior
-    min_points
+    min_area
 end
 
 mutable struct KalmanCellData
@@ -23,7 +23,8 @@ isfiltered(cell::Cell) = cell.data.filtered
 issmoothed(cell::Cell) = cell.data.smoothed
 
 function RegionTrees.needs_refinement(r::KalmanRefinery, cell)
-    return length(data_indices(cell.data)) > r.min_points
+    # return length(data_indices(cell.data)) > r.min_points
+    return area(cell.boundary) > r.min_area
 end
 
 function RegionTrees.refine_data(r::KalmanRefinery, cell::Cell, indices)
@@ -33,8 +34,8 @@ function RegionTrees.refine_data(r::KalmanRefinery, cell::Cell, indices)
     return KalmanCellData(jj, r.state_prior)
 end
 
-function observe!(leaf, observation, obs_loglik)
-    f(μ) = -obs_loglik(μ, observation) - logpdf(leaf.data.state, μ)
+function observe!(leaf, observations, obs_loglik)
+    f(μ) = -obs_loglik(μ, observations) - logpdf(leaf.data.state, μ)
     opt = optimize(f, zeros(length(leaf.data.state)))
     μ = opt.minimizer
     H = ForwardDiff.hessian(f, μ)
@@ -47,8 +48,8 @@ function observe_data!(r, tree)
     ll = 0.0
     for leaf in allleaves(tree)
         if has_observation(leaf)
-            observation = r.observations[only(leaf.data.ii_data)]
-            ll += observe!(leaf, observation, r.obs_loglik)
+            observations = r.observations[leaf.data.ii_data]
+            ll += observe!(leaf, observations, r.obs_loglik)
         end
         leaf.data.filtered = true # even if no data, get it ready to merge upwards
     end
@@ -124,4 +125,18 @@ function multiresolution_smooth!(r, tree)
     smooth_downscale!(r, tree)
 end
 
-    
+function stat_array(tree, stat, i)
+    leaves = collect(allleaves(tree))
+    nleaves = length(leaves)
+    d = length(first(leaves).boundary.origin)
+    nside = Int(nleaves^(1/d))
+    Z = zeros(fill(nside, d)...)
+    for j in 1:nleaves
+        ic = morton2cartesian(j)
+        Z[ic...] = stat(leaves[j].data.state)[i]
+    end
+    return reverse(Z, dims=2)
+end
+
+mean_array(tree, i) = stat_array(tree, mean, i)
+cov_array(tree, i) = stat_array(tree, cov, i)

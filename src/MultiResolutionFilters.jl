@@ -8,6 +8,7 @@ using Optim
 using ForwardDiff
 using LinearAlgebra
 using DataStructures
+using Morton
 
 export ParticleRefinery,
     ParticleCellData,
@@ -34,8 +35,11 @@ export ParticleRefinery,
     isfiltered,
     issmoothed,
     ready_to_merge,
-    merge_child_states!
+    merge_child_states!,
 
+    stat_array,
+    mean_array,
+    cov_array
 
 abstract type StateSpaceRefinery <: AbstractRefinery end
 
