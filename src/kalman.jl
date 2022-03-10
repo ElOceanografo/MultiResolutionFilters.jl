@@ -56,15 +56,21 @@ function observe_data!(r, tree)
     return ll
 end
 
-function predict_upscale(r, leaf)
+function predict_upscale(r, μt, Pt)
     A = r.A
     B = r.B
-    μt, Pt = mean(leaf.data.state), cov(leaf.data.state)
     Ft = inv(A) * (I - B * B' * inv(Pt))
     μt_pred = Ft * μt
     Qt = I - B' * Pt * B
     𝒬t = inv(A) * B * Qt * B' * inv(A)
     Pt_pred = Ft * Pt * Ft' + 𝒬t
+    return μt_pred, Pt_pred
+end
+
+function predict_upscale(r, leaf)
+    μt = mean(leaf.data.state)
+    Pt = cov(leaf.data.state)
+    μt_pred, Pt_pred = predict_upscale(r, μt, Pt)
     return (μ = μt_pred, P = Pt_pred, Pinv = inv(Pt_pred))
 end
 
@@ -117,7 +123,7 @@ function smooth_downscale!(r, tree, x_parent_filtered)
 end
 
 # default method assuming whole tree has been filtered and we're starting at the root node
-smooth_downscale!(r, tree) = smooth_downscale!(r, tree, tree.data.state)
+smooth_downscale!(r, tree) = smooth_downscale!(r, tree, r.state_prior)#tree.data.state)
 
 function multiresolution_smooth!(r, tree)
     observe_data!(r, tree)
