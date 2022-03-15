@@ -29,17 +29,25 @@ export ParticleRefinery,
     has_observation,
     observe!,
     observe_data!,
+    predict_upscale,
     filter_upscale!,
+    downscale,
     smooth_downscale!,
     multiresolution_smooth!,
     isfiltered,
     issmoothed,
     ready_to_merge,
     merge_child_states!,
-
+    simulate_prior!,
+    simulate_posterior!,
+    set_priors!,
+    state,
+    prior,
+    value,
     stat_array,
     mean_array,
-    cov_array
+    cov_array,
+    value_array
 
 abstract type StateSpaceRefinery <: AbstractRefinery end
 
