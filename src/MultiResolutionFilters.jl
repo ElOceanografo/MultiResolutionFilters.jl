@@ -14,6 +14,7 @@ export ParticleRefinery,
     ParticleCellData,
     MultiResolutionPF,
     nobs,
+    nlevels,
     needs_refinement,
     inrect,
     calculate_weights,
@@ -107,6 +108,14 @@ function calculate_weights(states, observations, loglikelihood)
 end
 
 area(hr::HyperRectangle) = prod(hr.widths)
+
+function nlevels(tree::Cell)
+    if children(tree) != nothing
+        return 1 + maximum(nlevels(child) for child in children(tree))
+    else
+        return 1
+    end
+end
 
 function particlefilter(r::ParticleRefinery, state_particles, observations)
     nparticles = length(state_particles)
