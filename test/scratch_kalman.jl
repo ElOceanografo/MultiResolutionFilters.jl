@@ -23,12 +23,12 @@ obs_loglik([1, 2], [0, 1, 1, 3, 2])
 
 r = KalmanRefinery(
     a -> I(2),
-    a -> 0.5e-6 * a * I(2),
+    a -> 0.5 * I(2) * a^(-1/100),
     observations,
     locations,
     obs_loglik,
     MvNormal(zeros(2), 1.0),
-    250
+    100
 )
 
 root = KalmanCellData(1:length(observations), r.state_prior)
@@ -43,43 +43,47 @@ observe_data!(r, tree)
 plot(heatmap(mean_array(tree, 1), yflip=true),
     heatmap(sqrt.(cov_array(tree, 1)), yflip=true, c=:viridis))
 
+leaves = collect(allleaves(tree))
+p = parent(leaves[900])
+cc = children(p)
 
-plt0 = plot(Normal(mean(parent)[1], sqrt(cov(parent)[1, 1])), label="Parent");
-for (i, child) in enumerate(children)
+plt0 = plot(Normal(mean(p)[1], sqrt(cov(p)[1, 1])), label="Parent (prior)");
+for (i, child) in enumerate(cc)
     x_child = child.data.state
-    μ_pred, P_pred, Pinv_pred = predict_upscale(r, parent, child)
+    μ_pred, P_pred, Pinv_pred = predict_upscale(r, p, child)
     println(Pinv_pred)
     plot!(plt0, Normal(mean(x_child)[1], sqrt(cov(x_child)[1, 1])), 
-        label="Child $(i)", color=i+1) 
+        label="Child $(i) (prior/pred. up)", color=i+1) 
     plot!(plt0, Normal(μ_pred[1], sqrt(P_pred[1, 1])), 
         label="", color=i+1, linestyle=:dash) 
 end
 plt0
 
 
-merge_child_states!(r, parent)
-plt1 = plot(Normal(mean(parent)[1], sqrt(cov(parent)[1, 1])), label="Parent");
+merge_child_states!(r, p)
+plt1 = plot(Normal(mean(p)[1], sqrt(cov(p)[1, 1])), label="Parent (merged)");
 Pt = zeros(2,2)
-for (i, child) in enumerate(children)
-    μ, P, Pinv = predict_upscale(r, parent, child)
+for (i, child) in enumerate(cc)
+    μ, P, Pinv = predict_upscale(r, p, child)
     Pt += inv(P)
     plot!(plt1, Normal(μ[1], sqrt(P[1, 1])), 
-        label="Child $(i)") 
+        label="Child $(i) (pred. up)") 
 end
 plt1
 
-plt2 = plot(Normal(mean(parent)[1], sqrt(cov(parent)[1, 1])), label="Parent");
-for (i, child) in enumerate(children)
-    state_smoothed = downscale(r, parent, child)
+plt2 = plot(Normal(mean(p)[1], sqrt(cov(p)[1, 1])), label="Parent (merged)");
+for (i, child) in enumerate(cc)
+    state_smoothed = downscale(r, p, child)
     plot!(plt2, Normal(mean(state_smoothed)[1], sqrt(cov(state_smoothed)[1, 1])), 
-        label="Child $(i)") 
+        label="Child $(i) (smoothed)") 
 end
-plot(plt0, plt1, plt2, layout=(3,1), xlims=(-3, 3.5))
+plot(plt0, plt1, plt2, layout=(3,1), xlims=(-4, 4), ylims=(0, 1.5))
 
 
-@time multiresolution_smooth!(r, tree)
+multiresolution_smooth!(r, tree)
 plot(heatmap(mean_array(tree, 1), yflip=true),
-    heatmap(sqrt.(cov_array(tree, 1)), yflip=true, c=:viridis))
+    heatmap(sqrt.(cov_array(tree, 1)), yflip=true, c=:viridis),
+    size=(1000, 500))
 
 simulate_posterior!(r, tree)
-heatmap(value_array(tree, 1), yflip=true)
+heatmap(value_array(tree, 1), yflip=true, clim=(-4, 4))
