@@ -18,6 +18,7 @@ export ParticleRefinery,
     inrect,
     calculate_weights,
     area,
+    centroid,
     particlefilter,
     refine_data,
     adaptive_filter!,
@@ -54,7 +55,7 @@ abstract type StateSpaceRefinery <: AbstractRefinery end
 struct ParticleRefinery <: StateSpaceRefinery
     downscale::Function         # function downscale(state, child_area) -> state_new
     observe::Function           # function observe(state) -> simulated observation
-    loglikelihood::Function     # Function loglikelihood(state, observations)
+    obs_loglik::Function     # Function loglikelihood(state, observations)
     needs_refinement::Function  # function needs_refinement(cell) -> Bool
     jitter::Function            # function jitter(state) -> state + noise
 end
@@ -107,9 +108,9 @@ end
 
 area(hr::HyperRectangle) = prod(hr.widths)
 
-function particlefilter(r, state_particles, observations)
+function particlefilter(r::ParticleRefinery, state_particles, observations)
     nparticles = length(state_particles)
-    w = calculate_weights(state_particles, observations, r.loglikelihood)
+    w = calculate_weights(state_particles, observations, r.obs_loglik)
     new_states = sample(r.jitter.(state_particles), weights(w), nparticles)
     return new_states, w
 end
