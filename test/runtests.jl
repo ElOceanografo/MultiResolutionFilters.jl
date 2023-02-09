@@ -1,53 +1,69 @@
-using MultiResolutionFilters
-using Test
-using DataFrames, CSV
+# using MultiResolutionFilters
+# using Test
 using Distributions
-using StaticArrays
-using LinearAlgebra
 using RegionTrees
+using Morton
+using StaticArrays
+using RxInfer
+import RegionTrees: AbstractRefinery, needs_refinement, refine_data
 
-function obs_loglik(μ, observation)
-    return sum(logpdf.(Poisson.(exp.(μ[1])), observation))
+struct RWRefinery <: AbstractRefinery
+    tolerance::Float64
+    σ::Float64
+    d::Int
 end
 
-function newtree()
-    data = CSV.read("test_data.csv", DataFrame)
-    locations = [SVector(row...) for row in eachrow(data[:, [:x, :y]])]
-    observations = rand.(Poisson.(exp.(2.5data.z)))
-    r = KalmanRefinery(
-        a -> I(2),
-        a -> 0.5e-6 * a * I(2),
-        observations,
-        locations,
-        obs_loglik,
-        MvNormal(zeros(2), 1.0),
-        250
-    )
-    root = KalmanCellData(1:length(observations), r.state_prior)
-    tree = Cell(SVector(0.0, 0.0), SVector(1e3, 1e3), root)
-    adaptivesampling!(tree, r)
-    return r, tree
+# These two methods are all we need to implement
+function needs_refinement(r::RWRefinery, cell)
+    maximum(cell.boundary.widths) > r.tolerance
 end
 
-@testset "MultiResolutionFilters.jl" begin
-    r, tree = newtree()
+function refine_data(r::RWRefinery, cell::Cell, indices)
+    boundary = child_boundary(cell, indices)
+    i = 2^r.d *(index(cell)-1) + cartesian2morton([indices...]) + 1
+    # println(index(cell), " ", indices, " ", cartesian2morton([indices...]), " ", i)
+    area = prod(boundary.widths)
+    return (i=i, x=cell.data.x + r.σ * randn())
+end
+
+nleaves(tree) = length(collect(allleaves(tree)))
+ncells(tree) = length(collect(allcells(tree)))
+index(cell) = cell.data.i
+data(cell) = cell.data.x
+coordinates(cell) = cell.boundary.origin
+# Now we can use our refinery to create the entire tree, with
+# all cells split automatically:
+r = RWRefinery(0.05, 0.1, 2)
+root = Cell(SVector(0., 0), SVector(1., 1), (i=1, x=0.0))
+adaptivesampling!(root, r)
+length(collect(allcells(root)))
+length(unique(index.(allcells(root))))
+
+
+z = data.(allleaves(root))
+xy = coordinates.(allleaves(root))
+x = first.(xy)
+y = last.(xy)
+using Plots
+scatter(x, y, zcolor=z, markerstrokewidth=0, shape=:square, aspect_ratio=:equal,
+    markersize=5)
+
+length(collect(allcells(root)))
+length(unique(index.(allcells(root))))
+
+@model function treemodel(tree, nc, nl, σ)
+    y = datavar(nl)
+    x = randomvar(nc)
     
-    nleaves = length(collect(allleaves(tree)))
-    ii = findall(has_observation, collect(allleaves(tree)))
+    x[1] ~ NormalMeanVariance(0.0, 1.0)
+    for cell in collect(allcells(tree))[2:end]
+        i = index(cell)
+        i_parent = index(parent(cell))
+        x[i] ~ NormalMeanVariance(x[i_parent], σ^2)
+    end
+
+    for (j, leaf) in enumerate(alleaves(tree))
+        y[i] ~ NormalMeanVariance(x[index(leaf)], 0.1)
+    end
     
-    @test length(ii) < nleaves
-
-    i = first(ii)
-    leaf = collect(allleaves(tree))[i]
-    state0 = deepcopy(leaf.data.state)
-    observation = r.observations[leaf.data.ii_data]
-    observe!(leaf, r.observations[only(leaf.data.ii_data)], r.obs_loglik)
-
-    @test mean(state0) != mean(leaf.data.state)
-    @test diag(cov(state0)) != diag(cov(leaf.data.state))
-
-    observe_data!(r, tree)
-    @test all(isfiltered.(collect(allleaves(tree))))
-
-    multiresolution_smooth!(r, tree)
 end
