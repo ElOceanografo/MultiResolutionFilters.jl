@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Missings = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
 Morton = "2a6d852e-3fac-5a38-885c-fe708af2d09e"
 RegionTrees = "dee08c22-ab7f-5625-9660-a9af2021b33f"
 RxInfer = "86711068-29c9-4ff7-b620-ae75d7495b3d"
